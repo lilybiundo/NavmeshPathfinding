@@ -2,20 +2,40 @@ from math import sqrt
 from heapq import heappush, heappop, heapify
 
 A_STAR = True
+BIDIRECTIONAL = True
 
-def dijkstras_shortest_path(start_point, end_point, src, dst, mesh):
+def shortest_path(start_point, end_point, src, dst, mesh):
     visited_boxes = []
-    dist = {}
-    dist[src] = 0
-    prev = {}
-    queue = []
-    heappush(queue, (dist[src], src, start_point))
 
-    while queue:
-        _, min_box, min_point = heappop(queue)
-        if min_box == dst:
-            break
-        visited_boxes.append(min_box)
+    src_dist = {}
+    src_dist[src] = 0
+    src_prev = {}
+    src_queue = []
+    heappush(src_queue, (src_dist[src], src, start_point))
+
+    dst_dist = {}
+    dst_dist[dst] = 0
+    dst_prev = {}
+    dst_queue = []
+    heappush(dst_queue, (dst_dist[dst], dst, end_point))
+
+    src_dst_flop = True
+    found = None
+
+    while src_queue and dst_queue:
+        if BIDIRECTIONAL and src_dst_flop:
+            dist = dst_dist
+            _, min_box, min_point = heappop(dst_queue)
+            visited_boxes.append(min_box)
+            if min_box == src:
+                break
+        else:
+            dist = src_dist
+            _, min_box, min_point = heappop(src_queue)
+            visited_boxes.append(min_box)
+            if min_box == dst:
+                break
+
         for box in get_adjacent(mesh, min_box):
             # dist[min_box] is the distance of the path up to the min_box
             # step_dist is the step just made from min_box to box
@@ -24,27 +44,80 @@ def dijkstras_shortest_path(start_point, end_point, src, dst, mesh):
             step_dist = euclid_dist(min_point, (x,y))
             alt = dist[min_box] + step_dist
             if A_STAR:
-                alt += euclid_dist((x,y), end_point)
+                if BIDIRECTIONAL and src_dst_flop:
+                    alt += euclid_dist((x,y), start_point)
+                else:
+                    alt += euclid_dist((x,y), end_point)
+
             if (box not in dist) or alt < dist[box]:
-                dist[box] = alt
-                prev[box] = min_box
-                if (_, box) in queue:
-                    queue.remove(queue.index((_, box)))
-                    queue.heapify()
-                heappush(queue, (alt, box, (x,y)))
+                if BIDIRECTIONAL and src_dst_flop:
+                    dst_dist[box] = alt
+                    dst_prev[box] = min_box
+                    if (_, box) in dst_queue:
+                        dst_queue.remove(dst_queue.index((_, box)))
+                        dst_queue.heapify()
+                    heappush(dst_queue, (alt, box, (x,y)))
+                else:
+                    src_dist[box] = alt
+                    src_prev[box] = min_box
+                    if (_, box) in src_queue:
+                        src_queue.remove(src_queue.index((_, box)))
+                        src_queue.heapify()
+                    heappush(src_queue, (alt, box, (x,y)))
+
+            if BIDIRECTIONAL:
+                # check for a meeting
+                if src_dst_flop:
+                    # remember this means dst is searching
+                    if box in src_prev:
+                        visited_boxes.append(box)
+                        found = box
+                        break
+                else:
+                    if box in dst_prev:
+                        visited_boxes.append(box)
+                        found = box
+                        break
+
+        if found != None:
+            print "break on found"
+            break
+        src_dst_flop = not src_dst_flop
+
+    print "got to point A"
 
     # walk backwards down the path
-    path = []
-    if not (dst in prev):
-        return []
-    path.append(prev[dst])
-    path.append(dst)
-    while prev[path[0]] is not src:
-        path.insert(0, prev[path[0]])
-    path.insert(0, src)
+    box_path = []
+    if not BIDIRECTIONAL:
+        # monodirectional search, if dst was found start from there
+        if not (dst in src_prev):
+            return [], visited_boxes
+        box_path.append(src_prev[dst])
+        box_path.append(dst)
+    else:
+        # bidirectional search, start at shared node
+        box_path.append(found)
 
-    return path, visited_boxes
+    print "got to point B"
 
+    print "found: "+str(found)
+    print "src_prev: "+str(src_prev)
+    print "dst_prev: "+str(dst_prev)
+
+    while src_prev[box_path[0]] is not src:
+        box_path.insert(0, src_prev[box_path[0]])
+    box_path.insert(0, src)
+
+    print "got to point C"
+
+    if BIDIRECTIONAL:
+        while dst_prev[box_path[-1]] is not dst:
+            box_path.append(dst_prev[box_path[-1]])
+        box_path.append(dst)
+
+    print "got to point D"
+
+    return box_path, visited_boxes
 
 def euclid_dist(p1, p2):
     x1, y1 = p1
@@ -114,7 +187,7 @@ def find_path(src, dst, mesh):
 
     out_path = []
 
-    box_path, visited_boxes = dijkstras_shortest_path(src, dst, src_box, dst_box, mesh)
+    box_path, visited_boxes = shortest_path(src, dst, src_box, dst_box, mesh)
 
     prev_x, prev_y = src
     prev_box = src_box
