@@ -22,17 +22,20 @@ def shortest_path(start_point, end_point, src, dst, mesh):
     src_dst_flop = True
     found = None
 
+    if dst in get_adjacent(mesh, src):
+        return [src, dst], [src, dst]
+
     while src_queue and dst_queue:
         if BIDIRECTIONAL and src_dst_flop:
             dist = dst_dist
             _, min_box, min_point = heappop(dst_queue)
             visited_boxes.append(min_box)
-            if min_box == src:
-                break
         else:
             dist = src_dist
             _, min_box, min_point = heappop(src_queue)
             visited_boxes.append(min_box)
+
+        if not BIDIRECTIONAL:
             if min_box == dst:
                 break
 
@@ -80,11 +83,8 @@ def shortest_path(start_point, end_point, src, dst, mesh):
                         break
 
         if found != None:
-            print "break on found"
             break
         src_dst_flop = not src_dst_flop
-
-    print "got to point A"
 
     # walk backwards down the path
     box_path = []
@@ -92,30 +92,21 @@ def shortest_path(start_point, end_point, src, dst, mesh):
         # monodirectional search, if dst was found start from there
         if not (dst in src_prev):
             return [], visited_boxes
-        box_path.append(src_prev[dst])
         box_path.append(dst)
     else:
+        if found == None:
+            return [], visited_boxes
         # bidirectional search, start at shared node
         box_path.append(found)
 
-    print "got to point B"
-
-    print "found: "+str(found)
-    print "src_prev: "+str(src_prev)
-    print "dst_prev: "+str(dst_prev)
-
-    while src_prev[box_path[0]] is not src:
+    while src_prev[box_path[0]] != src:
         box_path.insert(0, src_prev[box_path[0]])
     box_path.insert(0, src)
 
-    print "got to point C"
-
     if BIDIRECTIONAL:
-        while dst_prev[box_path[-1]] is not dst:
+        while dst_prev[box_path[-1]] != dst:
             box_path.append(dst_prev[box_path[-1]])
         box_path.append(dst)
-
-    print "got to point D"
 
     return box_path, visited_boxes
 
@@ -177,17 +168,29 @@ def find_path(src, dst, mesh):
     out_path = []
     visited_boxes = []
 
+    src_box = None
+    dst_box = None
+
     for box in mesh['boxes']:
         if (box_contains(box, src)):
             src_box = box
         if (box_contains(box, dst)):
             dst_box = box
 
-    assert src_box and dst_box
+    if not (src_box and dst_box):
+        print "No path possible!"
+        return [], visited_boxes
+
+    if src_box == dst_box:
+        return [(src,dst)], [src_box]
 
     out_path = []
 
     box_path, visited_boxes = shortest_path(src, dst, src_box, dst_box, mesh)
+
+    if not box_path:
+        print "No path possible!"
+        return [], visited_boxes
 
     prev_x, prev_y = src
     prev_box = src_box
